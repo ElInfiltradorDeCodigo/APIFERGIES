@@ -1,0 +1,4 @@
+RewriteEngine On 
+RewriteRule ^api/alumnos/?$ api/app.php
+RewriteRule ^api/alumnos/([0-9]+)?$ api/app.php?id=$1
+RewriteRule ^api/login/?$ api/login.php
