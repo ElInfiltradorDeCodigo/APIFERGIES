@@ -5,8 +5,7 @@ require_once 'headers.php';
 $conn = new mysqli('localhost', 'root', '', 'fergies');
 
 if ($conn->connect_error) {
-    sendJsonResponse('error', null, "Conexión fallida: " . $conn->connect_error);
-    exit;
+    die("Conexión fallida: " . $conn->connect_error);
 }
 
 function sendJsonResponse($status, $data, $message = '') {
@@ -15,122 +14,147 @@ function sendJsonResponse($status, $data, $message = '') {
     exit;
 }
 
-function validateEmail($email) {
-    return filter_var($email, FILTER_VALIDATE_EMAIL);
-}
-
-function handleGetRequest($conn) {
-    if (isset($_GET['idCliente'])) {
-        $idCliente = $conn->real_escape_string($_GET['idCliente']);
-        $stmt = $conn->prepare("SELECT * FROM clientes WHERE idCliente = ?");
-        $stmt->bind_param("i", $idCliente);
-        $stmt->execute();
-        $result = $stmt->get_result();
-
-        if ($data = $result->fetch_assoc()) {
-            sendJsonResponse('success', $data);
+switch ($_SERVER['REQUEST_METHOD']) {
+    case 'GET':
+        if (isset($_GET['idCliente'])) {
+            $idCliente = $conn->real_escape_string($_GET['idCliente']);
+            $result = $conn->query("SELECT * FROM clientes WHERE idCliente = '$idCliente'");
+            $data = $result->fetch_assoc();
+            if ($data) {
+                if ($data['foto'] !== null) {
+                    $data['foto'] = base64_encode($data['foto']);
+                }
+                sendJsonResponse('success', $data);
+            } else {
+                sendJsonResponse('error', null, 'No se encontró el cliente');
+            }
         } else {
-            sendJsonResponse('error', null, 'Cliente no encontrado');
+            $result = $conn->query("SELECT * FROM clientes");
+            $data = [];
+            while ($row = $result->fetch_assoc()) {
+                if ($row['foto'] !== null) {
+                    $row['foto'] = base64_encode($row['foto']);
+                }
+                $data[] = $row;
+            }
+            sendJsonResponse('success', $data);
         }
-    } else {
-        $result = $conn->query("SELECT * FROM clientes");
-        $clientes = [];
-        while ($row = $result->fetch_assoc()) {
-            $clientes[] = $row;
-        }
-        sendJsonResponse('success', $clientes);
-    }
-}
+        break;
 
-function handlePostRequest($conn) {
-    if (empty($_POST['nombre']) || empty($_POST['correo']) || empty($_POST['telefono'])) {
-        sendJsonResponse('error', null, 'Todos los campos son obligatorios');
-    } elseif (!validateEmail($_POST['correo'])) {
-        sendJsonResponse('error', null, 'El correo electrónico no es válido');
-    } else {
+    case 'POST':
+
+    case 'POST':
+        // Validaciones de campos
+        $errores = [];
+        if (empty($_POST['nombre'])) {
+            $errores[] = 'El campo nombre es obligatorio';
+        }
+        if (empty($_POST['correo']) || !filter_var($_POST['correo'], FILTER_VALIDATE_EMAIL)) {
+            $errores[] = 'Se requiere un correo electrónico válido';
+        }
+        if (empty($_POST['teléfono'])) {
+            $errores[] = 'El campo teléfono es obligatorio';
+        }
+        if (strlen($_POST['calle']) > 80) {
+            $errores[] = 'El campo calle no debe exceder los 80 caracteres';
+        }
+        if (strlen($_POST['colonia']) > 80) {
+            $errores[] = 'El campo colonia no debe exceder los 80 caracteres';
+        }
+        if (isset($_POST['codigo_postal']) && strlen($_POST['codigo_postal']) != 5) {
+            $errores[] = 'El código postal debe tener 5 caracteres';
+        }
+
+        // Si hay errores, enviar respuesta y salir
+        if (count($errores) > 0) {
+            sendJsonResponse('error', null, implode(', ', $errores));
+            break;
+        }
+
+        // Manejo de la foto
         $foto = null;
-        if (!empty($_FILES['foto']['tmp_name'])) {
+        if (isset($_FILES['foto']) && $_FILES['foto']['tmp_name'] != '') {
             $foto = file_get_contents($_FILES['foto']['tmp_name']);
         }
 
-        $stmt = $conn->prepare("INSERT INTO clientes (nombre, correo, telefono, calle, colonia, codigo_postal, foto) VALUES (?, ?, ?, ?, ?, ?, ?)");
-        $stmt->bind_param("sssssss", $_POST['nombre'], $_POST['correo'], $_POST['telefono'], $_POST['calle'], $_POST['colonia'], $_POST['codigo_postal'], $foto);
+        // Preparación de la consulta
+        $stmt = $conn->prepare("INSERT INTO clientes (nombre, correo, teléfono, foto, calle, colonia, codigo_postal) VALUES (?, ?, ?, ?, ?, ?, ?)");
+        $stmt->bind_param("sssbsss", $_POST['nombre'], $_POST['correo'], $_POST['teléfono'], $foto, $_POST['calle'], $_POST['colonia'], $_POST['codigo_postal']);
 
+        if ($foto !== null) {
+            $stmt->send_long_data(3, $foto);
+        }
+
+        // Ejecución y respuesta
         if ($stmt->execute()) {
-            $data = ['idCliente' => $stmt->insert_id];
-            sendJsonResponse('success', $data);
+            $data = [
+                'idCliente' => $stmt->insert_id,
+                'nombre' => $_POST['nombre'],
+                'correo' => $_POST['correo'],
+                'teléfono' => $_POST['teléfono'],
+                'calle' => $_POST['calle'],
+                'colonia' => $_POST['colonia'],
+                'codigo_postal' => $_POST['codigo_postal']
+                // Puedes añadir aquí otros campos si los agregas en el futuro
+            ];
+            sendJsonResponse('success', $data, 'Cliente agregado con éxito');
         } else {
             sendJsonResponse('error', null, 'Error al insertar el cliente');
         }
-    }
-}
+        $stmt->close();
+        break;
 
-function handlePutRequest($conn) {
-    parse_str(file_get_contents("php://input"), $_PUT);
-    if (isset($_GET['idCliente'])) {
-        $idCliente = $conn->real_escape_string($_GET['idCliente']);
 
-        if (empty($_PUT['nombre']) || empty($_PUT['correo']) || empty($_PUT['telefono'])) {
-            sendJsonResponse('error', null, 'Todos los campos son obligatorios');
-        } elseif (!validateEmail($_PUT['correo'])) {
-            sendJsonResponse('error', null, 'El correo electrónico no es válido');
-        } else {
-            $foto = null;
-            if (!empty($_FILES['foto']['tmp_name'])) {
-                $foto = file_get_contents($_FILES['foto']['tmp_name']);
+    case 'PUT':
+        if (isset($_GET['idCliente'])) {
+            parse_str(file_get_contents("php://input"), $postData);
+            $idCliente = $conn->real_escape_string($_GET['idCliente']);
+
+            if (empty($postData['nombre']) || empty($postData['correo']) || empty($postData['telefono'])) {
+                sendJsonResponse('error', null, 'Todos los campos son obligatorios');
+                break;
             }
 
-            $stmt = $conn->prepare("UPDATE clientes SET nombre = ?, correo = ?, telefono = ?, calle = ?, colonia = ?, codigo_postal = ?, foto = ? WHERE idCliente = ?");
-            $stmt->bind_param("ssssssbi", $_PUT['nombre'], $_PUT['correo'], $_PUT['telefono'], $_PUT['calle'], $_PUT['colonia'], $_PUT['codigo_postal'], $foto, $idCliente);
+            $sql = "UPDATE clientes SET nombre = ?, correo = ?, telefono = ?, calle = ?, colonia = ?, codigo_postal = ?";
+            if (isset($_FILES['foto'])) {
+                $foto = file_get_contents($_FILES['foto']['tmp_name']);
+                $sql .= ", foto = ?";
+                $stmt = $conn->prepare($sql);
+                $stmt->bind_param("ssssssb", $postData['nombre'], $postData['correo'], $postData['telefono'], $postData['calle'], $postData['colonia'], $postData['codigo_postal'], $foto);
+            } else {
+                $stmt = $conn->prepare($sql);
+                $stmt->bind_param("ssssss", $postData['nombre'], $postData['correo'], $postData['telefono'], $postData['calle'], $postData['colonia'], $postData['codigo_postal']);
+            }
 
-            if ($stmt->execute()) {
-                sendJsonResponse('success', null, 'Cliente actualizado con éxito');
+            $stmt->execute();
+
+            if ($stmt->affected_rows > 0) {
+                sendJsonResponse('success', null);
             } else {
                 sendJsonResponse('error', null, 'Error al actualizar el cliente');
             }
         }
-    } else {
-        sendJsonResponse('error', null, 'ID de cliente no proporcionado');
-    }
-}
-
-function handleDeleteRequest($conn) {
-    if (isset($_GET['idCliente'])) {
-        $idCliente = $conn->real_escape_string($_GET['idCliente']);
-        $stmt = $conn->prepare("DELETE FROM clientes WHERE idCliente = ?");
-        $stmt->bind_param("i", $idCliente);
-        $stmt->execute();
-
-        if ($stmt->affected_rows > 0) {
-            sendJsonResponse('success', null, 'Cliente eliminado con éxito');
-        } else {
-            sendJsonResponse('error', null, 'Error al eliminar el cliente o cliente no encontrado');
-        }
-    } else {
-        sendJsonResponse('error', null, 'ID de cliente no proporcionado');
-    }
-}
-
-switch ($_SERVER['REQUEST_METHOD']) {
-    case 'GET':
-        handleGetRequest($conn);
-        break;
-
-    case 'POST':
-        handlePostRequest($conn);
-        break;
-
-    case 'PUT':
-        handlePutRequest($conn);
         break;
 
     case 'DELETE':
-        handleDeleteRequest($conn);
+        if (isset($_GET['idCliente'])) {
+            $idCliente = $conn->real_escape_string($_GET['idCliente']);
+            $stmt = $conn->prepare("DELETE FROM clientes WHERE idCliente = ?");
+            $stmt->bind_param("i", $idCliente);
+            $stmt->execute();
+
+            if ($stmt->affected_rows > 0) {
+                sendJsonResponse('success', null);
+            } else {
+                sendJsonResponse('error', null, 'Error al eliminar el cliente');
+            }
+        }
         break;
 }
 
 $conn->close();
 ?>
+
 
 
 

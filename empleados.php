@@ -41,13 +41,17 @@ switch ($_SERVER['REQUEST_METHOD']) {
 
     case 'POST':
         $data = json_decode(file_get_contents('php://input'));
-        if (empty($data->nombre) || empty($data->correo) || empty($data->contraseña) || empty($data->puesto)) {
+        if (empty($data->nombre) || empty($data->correo) || empty($data->contrasena) || empty($data->puesto)) {
             sendJsonResponse('error', null, 'Todos los campos son obligatorios');
         } elseif (!validateEmail($data->correo)) {
             sendJsonResponse('error', null, 'El correo electrónico no es válido');
         } else {
-            $stmt = $conn->prepare("INSERT INTO empleados (nombre, correo, contraseña, puesto, dirección, teléfono) VALUES (?, ?, ?, ?, ?, ?)");
-            $stmt->bind_param("ssssss", $data->nombre, $data->correo, $data->contraseña, $data->puesto, $data->dirección, $data->teléfono);
+            $foto = null;
+            if (isset($_FILES['foto']) && $_FILES['foto']['error'] == 0) {
+                $foto = addslashes(file_get_contents($_FILES['foto']['tmp_name']));
+            }
+            $stmt = $conn->prepare("INSERT INTO empleados (nombre, correo, contrasena, puesto, telefono, calle, colonia, codigo_postal, foto) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)");
+            $stmt->bind_param("ssssssssb", $data->nombre, $data->correo, $data->contrasena, $data->puesto, $data->telefono, $data->calle, $data->colonia, $data->codigo_postal, $foto);
             $stmt->execute();
             if ($stmt->affected_rows > 0) {
                 $data->idEmpleado = $stmt->insert_id;
@@ -62,13 +66,22 @@ switch ($_SERVER['REQUEST_METHOD']) {
         if (isset($_GET['idEmpleado'])) {
             $idEmpleado = $conn->real_escape_string($_GET['idEmpleado']);
             $data = json_decode(file_get_contents('php://input'));
-            if (empty($data->nombre) || empty($data->correo) || empty($data->contraseña) || empty($data->puesto)) {
+            if (empty($data->nombre) || empty($data->correo) || empty($data->contrasena) || empty($data->puesto)) {
                 sendJsonResponse('error', null, 'Todos los campos son obligatorios');
             } elseif (!validateEmail($data->correo)) {
                 sendJsonResponse('error', null, 'El correo electrónico no es válido');
             } else {
-                $stmt = $conn->prepare("UPDATE empleados SET nombre = ?, correo = ?, contraseña = ?, puesto = ?, dirección = ?, teléfono = ? WHERE idEmpleado = ?");
-                $stmt->bind_param("ssssssi", $data->nombre, $data->correo, $data->contraseña, $data->puesto, $data->dirección, $data->teléfono, $idEmpleado);
+                $fotoCambiada = isset($data->foto) && !empty($data->foto);
+                if (!$fotoCambiada) {
+                    // Obtener la foto actual de la base de datos
+                    $result = $conn->query("SELECT foto FROM empleados WHERE idEmpleado = '$idEmpleado'");
+                    $currentData = $result->fetch_assoc();
+                    $foto = $currentData['foto'];
+                } else {
+                    $foto = base64_decode($data->foto);
+                }
+                $stmt = $conn->prepare("UPDATE empleados SET nombre = ?, correo = ?, contrasena = ?, puesto = ?, telefono = ?, calle = ?, colonia = ?, codigo_postal = ?, foto = ? WHERE idEmpleado = ?");
+                $stmt->bind_param("ssssssssbi", $data->nombre, $data->correo, $data->contrasena, $data->puesto, $data->telefono, $data->calle, $data->colonia, $data->codigo_postal, $foto, $idEmpleado);
                 $stmt->execute();
                 if ($stmt->affected_rows > 0) {
                     sendJsonResponse('success', null);
@@ -96,3 +109,4 @@ switch ($_SERVER['REQUEST_METHOD']) {
 
 $conn->close();
 ?>
+
