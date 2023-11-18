@@ -42,8 +42,6 @@ switch ($_SERVER['REQUEST_METHOD']) {
         break;
 
     case 'POST':
-
-    case 'POST':
         // Validaciones de campos
         $errores = [];
         if (empty($_POST['nombre'])) {
