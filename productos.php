@@ -42,9 +42,42 @@ switch ($_SERVER['REQUEST_METHOD']) {
         break;
 
     case 'POST':
-        if (empty($_POST['nombre']) || empty($_POST['idDistribuidor']) || empty($_POST['idCategoria']) || empty($_POST['precio']) || empty($_POST['stock']) || !isset($_FILES['imagen'])) {
-            sendJsonResponse('error', null, 'Todos los campos son obligatorios');
+        if (isset($_GET['idProducto'])) {
+            // Es una actualización de un producto existente
+            $idProducto = $conn->real_escape_string($_GET['idProducto']);
+
+            if (empty($_POST['nombre']) || empty($_POST['idDistribuidor']) || empty($_POST['idCategoria']) || empty($_POST['precio']) || empty($_POST['stock'])) {
+                sendJsonResponse('error', null, 'Todos los campos son obligatorios');
+                break;
+            }
+
+            $sql = "UPDATE productos SET nombre = ?, idDistribuidor = ?, idCategoria = ?, precio = ?, stock = ?";
+            if (isset($_FILES['imagen'])) {
+                $imagen = file_get_contents($_FILES['imagen']['tmp_name']);
+                $sql .= ", columna_imagen = ?";
+                $stmt = $conn->prepare($sql);
+                $null = NULL;
+                $stmt->bind_param("siidib", $_POST['nombre'], $_POST['idDistribuidor'], $_POST['idCategoria'], $_POST['precio'], $_POST['stock'], $null);
+                $stmt->send_long_data(5, $imagen);
+            } else {
+                $stmt = $conn->prepare($sql);
+                $stmt->bind_param("siidi", $_POST['nombre'], $_POST['idDistribuidor'], $_POST['idCategoria'], $_POST['precio'], $_POST['stock']);
+            }
+
+            $stmt->execute();
+
+            if ($stmt->affected_rows > 0) {
+                sendJsonResponse('success', null);
+            } else {
+                sendJsonResponse('error', null, 'Error al actualizar el producto');
+            }
         } else {
+            // Es la creación de un nuevo producto
+            if (empty($_POST['nombre']) || empty($_POST['idDistribuidor']) || empty($_POST['idCategoria']) || empty($_POST['precio']) || empty($_POST['stock']) || !isset($_FILES['imagen'])) {
+                sendJsonResponse('error', null, 'Todos los campos son obligatorios');
+                break;
+            }
+
             $imagen = file_get_contents($_FILES['imagen']['tmp_name']);
             $stmt = $conn->prepare("INSERT INTO productos (nombre, idDistribuidor, idCategoria, precio, stock, columna_imagen) VALUES (?, ?, ?, ?, ?, ?)");
             $null = NULL;
@@ -68,38 +101,6 @@ switch ($_SERVER['REQUEST_METHOD']) {
         }
         break;
 
-    case 'PUT':
-        if (isset($_GET['idProducto'])) {
-            parse_str(file_get_contents("php://input"), $postData);
-            $idProducto = $conn->real_escape_string($_GET['idProducto']);
-
-            if (empty($postData['nombre']) || empty($postData['idDistribuidor']) || empty($postData['idCategoria']) || empty($postData['precio']) || empty($postData['stock'])) {
-                sendJsonResponse('error', null, 'Todos los campos son obligatorios');
-                break;
-            }
-
-            $sql = "UPDATE productos SET nombre = ?, idDistribuidor = ?, idCategoria = ?, precio = ?, stock = ?";
-            if (isset($_FILES['imagen'])) {
-                $imagen = file_get_contents($_FILES['imagen']['tmp_name']);
-                $sql .= ", columna_imagen = ?";
-                $stmt = $conn->prepare($sql);
-                $null = NULL;
-                $stmt->bind_param("siidib", $postData['nombre'], $postData['idDistribuidor'], $postData['idCategoria'], $postData['precio'], $postData['stock'], $null);
-                $stmt->send_long_data(5, $imagen);
-            } else {
-                $stmt = $conn->prepare($sql);
-                $stmt->bind_param("siidi", $postData['nombre'], $postData['idDistribuidor'], $postData['idCategoria'], $postData['precio'], $postData['stock']);
-            }
-
-            $stmt->execute();
-
-            if ($stmt->affected_rows > 0) {
-                sendJsonResponse('success', null);
-            } else {
-                sendJsonResponse('error', null, 'Error al actualizar el producto');
-            }
-        }
-        break;
 
     case 'DELETE':
         if (isset($_GET['idProducto'])) {
