@@ -107,38 +107,6 @@ switch ($_SERVER['REQUEST_METHOD']) {
         $stmt->close();
         break;
 
-
-
-    case 'PUT':
-        if (isset($_GET['idEmpleado'])) {
-            $idEmpleado = $conn->real_escape_string($_GET['idEmpleado']);
-            $data = json_decode(file_get_contents('php://input'));
-            if (empty($data->nombre) || empty($data->correo) || empty($data->contrasena) || empty($data->puesto)) {
-                sendJsonResponse('error', null, 'Todos los campos son obligatorios');
-            } elseif (!validateEmail($data->correo)) {
-                sendJsonResponse('error', null, 'El correo electrónico no es válido');
-            } else {
-                $fotoCambiada = isset($data->foto) && !empty($data->foto);
-                if (!$fotoCambiada) {
-                    // Obtener la foto actual de la base de datos
-                    $result = $conn->query("SELECT foto FROM empleados WHERE idEmpleado = '$idEmpleado'");
-                    $currentData = $result->fetch_assoc();
-                    $foto = $currentData['foto'];
-                } else {
-                    $foto = base64_decode($data->foto);
-                }
-                $stmt = $conn->prepare("UPDATE empleados SET nombre = ?, correo = ?, contrasena = ?, puesto = ?, telefono = ?, calle = ?, colonia = ?, codigo_postal = ?, foto = ? WHERE idEmpleado = ?");
-                $stmt->bind_param("ssssssssbi", $data->nombre, $data->correo, $data->contrasena, $data->puesto, $data->telefono, $data->calle, $data->colonia, $data->codigo_postal, $foto, $idEmpleado);
-                $stmt->execute();
-                if ($stmt->affected_rows > 0) {
-                    sendJsonResponse('success', null);
-                } else {
-                    sendJsonResponse('error', null, 'Error al actualizar el empleado');
-                }
-            }
-        }
-        break;
-
     case 'DELETE':
         if (isset($_GET['idEmpleado'])) {
             $idEmpleado = $conn->real_escape_string($_GET['idEmpleado']);
