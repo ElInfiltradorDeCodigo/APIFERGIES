@@ -18,15 +18,31 @@ switch ($_SERVER['REQUEST_METHOD']) {
     case 'GET':
         if (isset($_GET['idDetalle'])) {
             $idDetalle = $conn->real_escape_string($_GET['idDetalle']);
-            $result = $conn->query("SELECT * FROM detalleventa WHERE idDetalle = '$idDetalle'");
-            $data = $result->fetch_assoc();
-            if ($data) {
-                sendJsonResponse('success', $data);
-            } else {
-                sendJsonResponse('error', null, 'No se encontró el detalle de venta');
-            }
+            // Modifica la consulta para filtrar por idDetalle
         } else {
-            $result = $conn->query("SELECT * FROM detalleventa");
+            $query = "SELECT 
+                    detalleventa.idDetalle,
+                    detalleventa.idVenta,
+                    detalleventa.idProducto,
+                    detalleventa.cantidad,
+                    detalleventa.precio AS precioDetalle,
+                    productos.nombre AS nombreProducto,
+                    productos.precio AS precioProducto,
+                    ventas.fecha,
+                    ventas.total,
+                    empleados.nombre AS nombreEmpleado,
+                    clientes.nombre AS nombreCliente
+                  FROM 
+                    detalleventa
+                  JOIN 
+                    ventas ON detalleventa.idVenta = ventas.idVenta
+                  JOIN 
+                    empleados ON ventas.idEmpleado = empleados.idEmpleado
+                  JOIN 
+                    clientes ON ventas.idCliente = clientes.idCliente
+                  JOIN 
+                    productos ON detalleventa.idProducto = productos.idProducto";
+            $result = $conn->query($query);
             $data = [];
             while ($row = $result->fetch_assoc()) {
                 $data[] = $row;

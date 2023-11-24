@@ -16,23 +16,27 @@ function sendJsonResponse($status, $data, $message = '') {
 
 switch ($_SERVER['REQUEST_METHOD']) {
     case 'GET':
-        if (isset($_GET['idVenta'])) {
-            $idVenta = $conn->real_escape_string($_GET['idVenta']);
-            $result = $conn->query("SELECT * FROM Ventas WHERE idVenta = '$idVenta'");
-            $data = $result->fetch_assoc();
-            if ($data) {
-                sendJsonResponse('success', $data);
-            } else {
-                sendJsonResponse('error', null, 'No se encontró la venta');
+        $queryVentas = "SELECT ventas.*, empleados.nombre AS nombreEmpleado, clientes.nombre AS nombreCliente 
+                    FROM ventas 
+                    JOIN empleados ON ventas.idEmpleado = empleados.idEmpleado 
+                    JOIN clientes ON ventas.idCliente = clientes.idCliente";
+        $resultVentas = $conn->query($queryVentas);
+        $ventas = [];
+        while ($venta = $resultVentas->fetch_assoc()) {
+            $idVenta = $venta['idVenta'];
+            $queryDetalles = "SELECT detalleventa.*, productos.nombre AS nombreProducto 
+                          FROM detalleventa 
+                          JOIN productos ON detalleventa.idProducto = productos.idProducto 
+                          WHERE detalleventa.idVenta = '$idVenta'";
+            $resultDetalles = $conn->query($queryDetalles);
+            $detalles = [];
+            while ($detalle = $resultDetalles->fetch_assoc()) {
+                $detalles[] = $detalle;
             }
-        } else {
-            $result = $conn->query("SELECT * FROM Ventas");
-            $data = [];
-            while ($row = $result->fetch_assoc()) {
-                $data[] = $row;
-            }
-            sendJsonResponse('success', $data);
+            $venta['detalles'] = $detalles;
+            $ventas[] = $venta;
         }
+        sendJsonResponse('success', $ventas);
         break;
 
     case 'POST':
